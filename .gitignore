@@ -1,0 +1,14 @@
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# OS / Editor
+.DS_Store
+.vscode/
