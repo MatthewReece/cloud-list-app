@@ -15,12 +15,20 @@ provider "aws" {
   region = var.aws_region
 }
 
-# --- S3 Bucket for Static Website ---
+# --------------------------------------------
+# S3 Bucket for Static Website
+# --------------------------------------------
 resource "aws_s3_bucket" "frontend" {
   bucket = var.bucket_name
+
+  tags = {
+    Project     = "CloudListApp"
+    Environment = "Dev"
+    ManagedBy   = "Terraform"
+  }
 }
 
-# Block all public access (CloudFront will handle public delivery)
+# Block S3 public access (served through CloudFront)
 resource "aws_s3_bucket_public_access_block" "frontend" {
   bucket                  = aws_s3_bucket.frontend.id
   block_public_acls       = true
@@ -29,7 +37,7 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   restrict_public_buckets = true
 }
 
-# Enable static website hosting (still private; CloudFront will access via OAC)
+# Enable static website hosting on S3
 resource "aws_s3_bucket_website_configuration" "frontend" {
   bucket = aws_s3_bucket.frontend.id
 
@@ -42,7 +50,9 @@ resource "aws_s3_bucket_website_configuration" "frontend" {
   }
 }
 
-# --- CloudFront Distribution ---
+# --------------------------------------------
+# CloudFront Distribution for Frontend
+# --------------------------------------------
 resource "aws_cloudfront_origin_access_control" "frontend" {
   name                              = "${var.bucket_name}-oac"
   description                       = "Access control for CloudFront to S3"
@@ -75,7 +85,7 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
-  price_class = "PriceClass_100" # free-tier friendly
+  price_class = "PriceClass_100" # Free-tier
 
   restrictions {
     geo_restriction {
@@ -86,9 +96,17 @@ resource "aws_cloudfront_distribution" "frontend" {
   viewer_certificate {
     cloudfront_default_certificate = true
   }
+
+  tags = {
+    Project     = "CloudListApp"
+    Environment = "Dev"
+    ManagedBy   = "Terraform"
+  }
 }
 
-# --- Bucket Policy to Allow CloudFront Access ---
+# --------------------------------------------
+# Bucket Policy to Allow CloudFront Access
+# --------------------------------------------
 data "aws_iam_policy_document" "bucket_policy" {
   statement {
     actions   = ["s3:GetObject"]
