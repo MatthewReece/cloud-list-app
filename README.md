@@ -1,6 +1,6 @@
 🛒 Cloud Shopping List MVP
 
-A secure, real-time Minimum Viable Product (MVP) for managing a shopping list. This project showcases proficiency in modern full-stack development using the React/Next.js frontend ecosystem combined with a robust, serverless infrastructure on Amazon Web Services (AWS).
+A secure, real-time Minimum Viable Product (MVP) for managing a shopping list. This project showcases proficiency in modern full-stack development using the React/Next.js frontend ecosystem combined with a robust, serverless infrastructure on Amazon Web Services (AWS) managed with Terraform.
 
 🌟 Key Features
 
@@ -10,55 +10,31 @@ Serverless CRUD: Full Create, Read, Update, and Delete (CRUD) functionality powe
 
 Optimized Hosting: High-performance, low-latency delivery via AWS S3 (storage) and AWS CloudFront (CDN).
 
+Infrastructure as Code (IaC): All AWS resources defined and managed using Terraform.
+
 Responsive UI: Built with React and styled using Tailwind CSS for a seamless experience on mobile and desktop.
 
 ⚙️ Technology Stack
 
-Component
+This project is built on the following core technologies:
 
-Technology
+Frontend: Next.js (Static Export), React, Tailwind CSS
 
-Role
+Infrastructure as Code (IaC): Terraform
 
-Frontend
+Authentication: AWS Cognito (Modular v6)
 
-Next.js (Static Export), React, Tailwind CSS
+API Layer: AWS API Gateway
 
-Client-side logic, routing, UI rendering, and styling.
+Compute: AWS Lambda (Node.js)
 
-Authentication
+Database: AWS DynamoDB
 
-AWS Cognito (Modular v6)
-
-User identity, sign-up, sign-in, and OAuth flow management.
-
-API Layer
-
-AWS API Gateway
-
-Secure, scalable REST API endpoint for Lambda integration.
-
-Compute
-
-AWS Lambda (Node.js)
-
-Serverless execution environment for all business logic (CRUD operations).
-
-Database
-
-AWS DynamoDB
-
-NoSQL database for storing and retrieving shopping list items.
-
-Deployment
-
-AWS S3, AWS CloudFront
-
-Static hosting and global content delivery network (CDN).
+Deployment: AWS S3, AWS CloudFront
 
 🏗️ Cloud Architecture & Data Flow
 
-This application is built on a scalable, serverless stack. The entire front-end is static, and all dynamic behavior is handled by AWS managed services.
+This application is built on a scalable, serverless stack. The entire front-end is static, and all dynamic behavior is handled by AWS managed services defined in Terraform.
 
 User Access: Users access the application via the CloudFront CDN URL, which serves the static files from the S3 bucket.
 
@@ -78,19 +54,19 @@ The successful deployment of this stack required solving several advanced config
 
 Challenge: The project began using the older, global Amplify V5 structure. A necessary switch to the modern, modular V6 structure introduced significant breaking changes in API access and component usage, creating major confusion around dependency imports and configuration file referencing.
 
-Resolution: Successfully refactored the entire authentication flow, moving from global Amplify.configure() calls to targeted modular imports (e.g., @aws-amplify/auth). This demonstrated an ability to adapt to rapid SDK changes and integrate modern, tree-shakeable AWS libraries.
+Resolution: Successfully refactored the entire authentication flow, moving from global Amplify.configure() calls to targeted modular imports. This demonstrated an ability to adapt to rapid SDK changes and integrate modern, tree-shakeable AWS libraries.
 
 2. Next.js Static Environment Variable Injection
 
-Challenge: Next.js, when configured for static export (output: 'export'), intentionally ignores standard environment variables (like REACT*APP*). The deployed app initially failed because the critical API URL was resolving as undefined.
+Challenge: Next.js, when configured for static export, intentionally ignores standard environment variables (like REACT*APP*). The deployed app initially failed because the critical API URL was resolving as undefined.
 
-Resolution: Correctly implemented the NEXT*PUBLIC* prefix across the codebase and configuration. The final URL was explicitly injected into the static build files via the package.json build script to guarantee its presence at deploy time, resolving the runtime configuration failure.
+Resolution: Correctly implemented the NEXT*PUBLIC* prefix across the codebase and configuration. The final URL was explicitly injected into the static build files via the package.json build script, guaranteeing its presence at deploy time.
 
-3. Configuration Guardrail Implementation
+3. Terraform for Infrastructure as Code (IaC)
 
-Challenge: An application must fail immediately during deployment if a critical API URL is missing, rather than failing silently at runtime.
+Challenge: Ensuring all AWS components (Cognito, API Gateway, Lambda, DynamoDB) were correctly wired together and accessible, while maintaining a reproducible deployment environment.
 
-Resolution: A TypeScript guardrail was implemented in the main component to immediately throw a specific, descriptive configuration error if the required API URL was missing. This prevents silent production failures and alerts the developer immediately to a configuration error.
+Resolution: Defined all backend resources using Terraform. This ensured a consistent and declarative state for the entire infrastructure, making the deployment fully repeatable and auditable.
 
 4. AWS Cognito Redirect Management
 
@@ -100,7 +76,7 @@ Resolution: The live CloudFront Domain Name was added to the "Allowed callback U
 
 🚀 Getting Started Locally
 
-To run this project on your machine, you will need Node.js and the AWS CLI configured.
+To run this project on your machine, you will need Node.js, the AWS CLI, and Terraform configured.
 
 Clone the repository and install dependencies:
 
