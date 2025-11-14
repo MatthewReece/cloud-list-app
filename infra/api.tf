@@ -1,4 +1,20 @@
 # -------------------------
+# Cognito Authorizer
+# -------------------------
+resource "aws_api_gateway_authorizer" "cognito_authorizer" {
+  name            = "CognitoAuthorizer"
+  rest_api_id     = aws_api_gateway_rest_api.shopping_api.id
+  type            = "COGNITO_USER_POOLS"
+  identity_source = "method.request.header.Authorization" # Looks for JWT in Authorization header
+  provider_arns   = [aws_cognito_user_pool.shopping_list_pool.arn]
+
+  # CRITICAL: Ensures the Authorizer is deployed after the User Pool is created
+  depends_on = [
+    aws_cognito_user_pool.shopping_list_pool
+  ]
+}
+
+# -------------------------
 # IAM Role for API Gateway CloudWatch Logs
 # -------------------------
 resource "aws_iam_role" "api_gateway_cloudwatch_role" {
@@ -64,7 +80,8 @@ resource "aws_api_gateway_method" "items_method" {
   rest_api_id   = aws_api_gateway_rest_api.shopping_api.id
   resource_id   = aws_api_gateway_resource.items.id
   http_method   = "ANY"
-  authorization = "NONE"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito_authorizer.id
 }
 
 # -------------------------
@@ -81,6 +98,20 @@ resource "aws_api_gateway_integration" "lambda_integration" {
   uri = aws_lambda_function.shopping_api.invoke_arn
 }
 
+# Lambda Permission for API Gateway (Ensures API Gateway can invoke the Lambda)
+# -------------------------
+resource "aws_lambda_permission" "allow_api_gateway" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.shopping_api.function_name
+  principal     = "apigateway.amazonaws.com"
+
+  # Restrict access to only the deployed API execution ARN
+  # This makes the permission specific to your API.
+  source_arn = "${aws_api_gateway_rest_api.shopping_api.execution_arn}/*/*"
+}
+
+
 # --- Deployment & Stage Management  ---
 
 # -------------------------
@@ -96,7 +127,10 @@ resource "aws_api_gateway_deployment" "shopping_api_deploy" {
       aws_api_gateway_method.items_method.id,
       aws_api_gateway_method.options_method.id,
       aws_api_gateway_integration.lambda_integration.id,
-      aws_api_gateway_integration_response.options_integration_response.id
+      aws_api_gateway_authorizer.cognito_authorizer.id,
+      aws_api_gateway_integration_response.options_integration_response.id,
+      # CRITICAL ADDITION: Your new 4XX CORS fix resource
+      aws_api_gateway_gateway_response.cors_4xx_response.id
     ]))
   }
 
@@ -163,7 +197,7 @@ resource "aws_api_gateway_method_settings" "dev_stage_settings" {
 # =========================================================================
 
 # -------------------------
-# 1. Method: OPTIONS HTTP on /items (Preflight Check)
+# Method: OPTIONS HTTP on /items (Preflight Check)
 # -------------------------
 resource "aws_api_gateway_method" "options_method" {
   rest_api_id   = aws_api_gateway_rest_api.shopping_api.id
@@ -173,7 +207,7 @@ resource "aws_api_gateway_method" "options_method" {
 }
 
 # -------------------------
-# 2. Integration: MOCK for OPTIONS (Handles CORS Headers)
+# Integration: MOCK for OPTIONS (Handles CORS Headers)
 # -------------------------
 resource "aws_api_gateway_integration" "options_integration" {
   rest_api_id = aws_api_gateway_rest_api.shopping_api.id
@@ -186,7 +220,7 @@ resource "aws_api_gateway_integration" "options_integration" {
 }
 
 # -------------------------
-# 3. Method Response: 200 OK for OPTIONS
+# Method Response: 200 OK for OPTIONS
 # -------------------------
 resource "aws_api_gateway_method_response" "options_200_method_response" {
   rest_api_id = aws_api_gateway_rest_api.shopping_api.id
@@ -221,4 +255,21 @@ resource "aws_api_gateway_integration_response" "options_integration_response" {
   }
 
   depends_on = [aws_api_gateway_method_response.options_200_method_response]
+}
+
+# =========================================================================
+#  CORS FIX FOR ERROR RESPONSES (4XX)
+# This resource forces API Gateway to include CORS headers on error responses (like 401).
+# =========================================================================
+resource "aws_api_gateway_gateway_response" "cors_4xx_response" {
+  # Referencing your main API resource
+  rest_api_id   = aws_api_gateway_rest_api.shopping_api.id
+  response_type = "DEFAULT_4XX"
+
+  # Map the CORS headers to the 4XX response
+  response_parameters = {
+    "gatewayresponse.header.Access-Control-Allow-Origin"  = "'*'"
+    "gatewayresponse.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "gatewayresponse.header.Access-Control-Allow-Methods" = "'*,GET,POST,PUT,DELETE,OPTIONS'"
+  }
 }

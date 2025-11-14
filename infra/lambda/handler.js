@@ -5,10 +5,36 @@ const crypto = require('crypto');
 const client = new DynamoDBClient({ region: process.env.AWS_REGION });
 const TABLE_NAME = process.env.TABLE_NAME;
 
+// -------------------------------------------------------------
+// Helper to get the authenticated user ID from the API Gateway event
+// -------------------------------------------------------------
+const getUserId = (event) => {
+    // When using a Cognito Authorizer with AWS_PROXY, the claims are in the authorizer context.
+    try {
+        const claims = event.requestContext.authorizer.claims;
+
+        // CRITICAL FIX: Access Tokens often pass the user ID as 'cognito:username'.
+        // We check for the most common claims in order of reliability.
+        const userId = claims['cognito:username'] || claims.username || claims.sub; 
+
+        if (!userId) {
+            console.error("User ID (sub/username) not found in Cognito claims. Claims object:", claims);
+            // Throwing an error is the safest way to prevent unauthorized DB access.
+            throw new Error("Authorization context is missing a User ID."); 
+        }
+        return userId;
+    } catch (e) {
+        // If the entire context is missing (no token provided/failed authorization)
+        console.error("Error accessing authorizer claims:", e);
+        // Throwing an error ensures a non-authenticated request fails with a 401/403.
+        throw new Error("Unauthorized access: User identity could not be retrieved.");
+    }
+}
+
 // Define common CORS headers to allow local/frontend access
 const CORS_HEADERS = {
     'Access-Control-Allow-Origin': '*', 
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization', 
     'Access-Control-Allow-Methods': 'OPTIONS,POST,GET,PUT,DELETE' 
 };
 
@@ -30,6 +56,15 @@ const validateInput = (body) => {
 exports.handler = async (event) => {
   console.log("Event:", event);
   
+  // Get the dynamic, authenticated userId as the very first step
+  let userId;
+  try {
+      userId = getUserId(event); 
+  } catch (e) {
+      // If getUserId fails, return a proper unauthorized response
+      return { statusCode: 401, headers: CORS_HEADERS, body: JSON.stringify({ error: e.message }) };
+  }
+
   // Handle the OPTIONS pre-flight check explicitly
   if (event.httpMethod === "OPTIONS") {
       return { statusCode: 204, headers: CORS_HEADERS };
@@ -37,13 +72,27 @@ exports.handler = async (event) => {
 
   try {
     if (event.httpMethod === "GET") {
-      // ... (GET Logic)
-      const data = await client.send(new ScanCommand({ TableName: TABLE_NAME }));
+      // -------------------------------------------------------------
+      // GET: Retrieve all items for the authenticated user
+      // -------------------------------------------------------------
+      const scanCommand = new ScanCommand({ 
+          TableName: TABLE_NAME,
+          // Filter to only get items belonging to the authenticated user
+          FilterExpression: "userId = :uid", 
+          ExpressionAttributeValues: {
+              ":uid": { S: userId } // Use dynamic userId
+          }
+      });
+      
+      const data = await client.send(scanCommand);
       const cleanItems = data.Items.map(item => unmarshall(item)); 
+      
       return { statusCode: 200, headers: CORS_HEADERS, body: JSON.stringify(cleanItems) };
       
     } else if (event.httpMethod === "POST") {
-      // ... (POST Logic)
+      // -------------------------------------------------------------
+      // POST: Add a new item for the authenticated user
+      // -------------------------------------------------------------
       const body = JSON.parse(event.body);
       const validationError = validateInput(body);
       if (validationError) {
@@ -52,7 +101,7 @@ exports.handler = async (event) => {
 
       const itemToSave = {
           itemId: crypto.randomBytes(16).toString('hex'), 
-          userId: 'user-123', 
+          userId: userId, // Use dynamic userId
           createdAt: new Date().toISOString(),
           checked: false,
           ...body, 
@@ -68,7 +117,9 @@ exports.handler = async (event) => {
       };
       
     } else if (event.httpMethod === "PUT") {
-      // Status Update (Check Off Item)
+      // -------------------------------------------------------------
+      // PUT: Update item status for the authenticated user
+      // -------------------------------------------------------------
       const body = JSON.parse(event.body);
 
       if (!body.itemId || typeof body.checked === 'undefined') {
@@ -77,9 +128,9 @@ exports.handler = async (event) => {
       
       const updateCommand = new UpdateItemCommand({
           TableName: TABLE_NAME,
-          Key: marshall({ // The Key must include BOTH Partition (userId) and Sort (itemId) Keys
-              userId: 'user-123', // <--  Static Partition Key (must match POST logic)
-              itemId: body.itemId, // The Sort Key passed from the frontend
+          Key: marshall({ // Key must include dynamic Partition (userId) and Sort (itemId) Keys
+              userId: userId, // Use dynamic userId
+              itemId: body.itemId, 
           }),
           UpdateExpression: "SET #c = :c",
           ExpressionAttributeNames: { "#c": "checked" },
@@ -97,14 +148,20 @@ exports.handler = async (event) => {
       };
       
     } else if (event.httpMethod === "DELETE") {
-      // Delete all items with checked: true status
+      // -------------------------------------------------------------
+      // DELETE: Remove checked items for the authenticated user
+      // -------------------------------------------------------------
       
-      // Scan to find all checked items (only need itemId)
+      // 1. Scan to find all checked items for *this specific user*
       const scanCommand = new ScanCommand({ 
           TableName: TABLE_NAME,
-          FilterExpression: "#c = :true", 
+          // Filter by both userId AND checked status
+          FilterExpression: "userId = :uid AND #c = :true", 
           ExpressionAttributeNames: { "#c": "checked" },
-          ExpressionAttributeValues: { ":true": { BOOL: true } },
+          ExpressionAttributeValues: { 
+              ":true": { BOOL: true },
+              ":uid": { S: userId } // Use dynamic userId
+          },
           ProjectionExpression: "itemId" 
       });
       const itemsToDelete = await client.send(scanCommand);
@@ -113,14 +170,15 @@ exports.handler = async (event) => {
           return { statusCode: 204, headers: CORS_HEADERS, body: "" };
       }
 
-      // Create and execute all deletions concurrently
+      // 2. Create and execute all deletions concurrently
       const deletePromises = itemsToDelete.Items.map(item => {
           const { itemId } = unmarshall(item); 
           return client.send(new DeleteItemCommand({
               TableName: TABLE_NAME,
+              // Key must include dynamic Partition (userId) and Sort (itemId) Keys
               Key: marshall({ 
-                  userId: 'user-123', // <-- ADDED STATIC Partition Key
-                  itemId: itemId      // <-- Sort Key from the scan
+                  userId: userId, // Use dynamic userId
+                  itemId: itemId      
               })
           }));    
       });
