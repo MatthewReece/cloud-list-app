@@ -74,12 +74,3 @@ Challenge: The Cognito OAuth flow requires the exact live URL to be specified on
 
 Resolution: The live CloudFront Domain Name was added to the "Allowed callback URLs" list within the Cognito User Pool's App Client settings, ensuring a successful and secure redirect upon successful user login.
 
-
-
-
-
-Run the application:
-
-npm run dev
-
-The application will be accessible at http://localhost:3000.
