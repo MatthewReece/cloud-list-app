@@ -74,26 +74,9 @@ Challenge: The Cognito OAuth flow requires the exact live URL to be specified on
 
 Resolution: The live CloudFront Domain Name was added to the "Allowed callback URLs" list within the Cognito User Pool's App Client settings, ensuring a successful and secure redirect upon successful user login.
 
-🚀 Getting Started Locally
 
-To run this project on your machine, you will need Node.js, the AWS CLI, and Terraform configured.
 
-Clone the repository and install dependencies:
 
-git clone [YOUR_REPO_URL]
-cd cloud-list-app/frontend
-npm install
-
-Configure Environment Variables:
-Create a file named .env.local in the frontend/ directory and add your development API URL and Cognito details.
-
-# frontend/.env.local
-
-NEXT_PUBLIC_API_URL=[https://jr1fnxnx7c.execute-api.us-east-1.amazonaws.com/dev/items](https://jr1fnxnx7c.execute-api.us-east-1.amazonaws.com/dev/items)
-
-# Add your Cognito IDs here for local testing
-
-NEXT_PUBLIC_COGNITO_USER_POOL_ID=...
 
 Run the application:
 
