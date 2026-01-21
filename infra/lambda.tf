@@ -31,7 +31,7 @@ resource "aws_iam_role_policy_attachment" "lambda_dynamo_access" {
 resource "aws_lambda_function" "shopping_api" {
   function_name    = "shopping-list-api-v2"
   role             = aws_iam_role.lambda_exec_role.arn
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "handler.handler"
   filename         = "${path.module}/lambda.zip"
   source_code_hash = filebase64sha256("${path.module}/lambda.zip")
